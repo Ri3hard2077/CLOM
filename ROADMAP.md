@@ -8,22 +8,38 @@
 
 🚀 Milestones
 
-+ v0.1 – v0.2 (MVP)
-  + Basic mod detection
-  + Load order management
-  + Profile creation & export
+# CLOM Roadmap
 
-+ v0.3 – v0.4
-  + Conflict resolver
-  + Backup scheduler
-  + Nexus API integration
+## Fase 1 – Basis (✅ afgerond)
+- Mods scannen (`list`)
+- Conflicten detecteren (`resolve`)
+- Profielen opslaan/laden (CLI)
+- Load order tonen (`order`)
+- Prioriteiten beheren (`priority-init` + `priority.json`)
 
-+ v0.5
-  + Performance profiler
-  + Smart recommendations
-  + First community release
+## Fase 2 – GUI Basis (✅ afgerond)
+- GUI met tabbladen (Mods, Conflicten, Load Order, Profielen)
+- Mods‑lijst tonen
+- Conflicten tonen
+- Load order tonen (ASCII en Priority)
+- Profielen beheren (opslaan/laden)
+- Load order import/export
 
-+ v1.0
-  + Full MO2 integration
-  + Cloud sync
-  + Plug‑in system
+## Fase 3 – GUI Interactiviteit (🚧 volgende stap)
+- Conflicten oplossen via knoppen (priority.json aanpassen)
+- Load order aanpassen via drag‑and‑drop
+- Profielenlijst tonen en beheren (opslaan, laden, verwijderen, hernoemen)
+
+## Fase 4 – Integraties
+- Nexus Mods API integratie (mods downloaden/updaten)
+- Version tracking (checken of mods up‑to‑date zijn)
+- Dependency management (waarschuwingen bij ontbrekende vereisten)
+
+## Fase 5 – GUI Uitbreiding
+- Drag‑and‑drop load order
+- Visuele conflictmeldingen
+- Profielen delen/exporteren via GUI
+
+## Fase 6 – Community features
+- Profielen delen (export/import van load orders)
+- Conflict‑database (community‑gedreven kennisbank)

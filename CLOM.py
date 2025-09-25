@@ -1,142 +1,103 @@
-import os
-import sys
+"""
+clom.py – Core logic for CLOM (Cyberpunk Load Order Manager)
+Uitgebreide versie met bestandstype-filter en load order sorting.
+"""
+
 import json
-import tkinter as tk
-from tkinter import messagebox
+from pathlib import Path
 
-def resource_path(filename):
+DEFAULT_PROFILES_PATH = Path("./profiles")
+DEFAULT_PROFILES_PATH.mkdir(parents=True, exist_ok=True)
+
+# Standaard relevante extensies
+DEFAULT_EXTENSIONS = [".archive", ".xl", ".yaml", ".json", ".lua", ".reds", ".ini"]
+
+def load_mods(path="./mods", extensions=None):
     """
-    Zorgt dat bestanden altijd naast de .exe of .py gevonden worden.
-    Dit voorkomt dat PyInstaller naar een tijdelijke map schrijft.
+    Laadt mods en filtert bestanden op extensie.
     """
-    if getattr(sys, 'frozen', False):
-        # Als we in een PyInstaller build zitten
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # Tijdens development
-        base_path = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_path, filename)
+    if extensions is None:
+        extensions = DEFAULT_EXTENSIONS
 
-def load_config():
-    path = resource_path("config.json")
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-    else:
-        # standaardconfig als er geen config.json is
-        return {"mod_folder": "test_mods"}
+    mods = []
+    path = Path(path)
+    if not path.exists():
+        return mods
 
-def load_modlist():
-    # Lees config.json
-    config = load_config()
-    mod_folder = config.get("mod_folder", "test_mods")
+    for entry in path.iterdir():
+        if entry.is_dir():
+            files = [
+                str(f.relative_to(entry))
+                for f in entry.rglob("*")
+                if f.is_file() and f.suffix.lower() in extensions
+            ]
+            mods.append({
+                "name": entry.name,
+                "version": "1.0",
+                "files": files
+            })
+    return mods
 
-    # Relatief pad → naast de .exe
-    if not os.path.isabs(mod_folder):
-        mod_folder = resource_path(mod_folder)
+def resolve_conflicts(mods):
+    """
+    Detecteert dubbele bestandsnamen tussen mods.
+    Retourneert een dict: { bestand: [mods die dit bestand bevatten] }
+    """
+    conflicts = {}
+    seen_files = {}
+    for mod in mods:
+        for f in mod["files"]:
+            if f in seen_files:
+                if f not in conflicts:
+                    conflicts[f] = [seen_files[f]]
+                conflicts[f].append(mod["name"])
+            else:
+                seen_files[f] = mod["name"]
+    return conflicts
 
-    if os.path.exists(mod_folder):
-        mods = [f for f in os.listdir(mod_folder) if f.endswith(".archive")]
-        if mods:
-            print(f"[CLOM] {len(mods)} mods gevonden in {mod_folder}")
-            return mods
-        else:
-            msg = f"[CLOM] Geen .archive bestanden gevonden in {mod_folder}"
-            print(msg)
-            try:
-                root = tk.Tk()
-                root.withdraw()
-                messagebox.showwarning("CLOM", msg)
-            except:
-                pass
-            return []
-    else:
-        msg = f"[CLOM] Map niet gevonden: {mod_folder}"
-        print(msg)
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showwarning("CLOM", msg)
-        except:
-            pass
+def save_profile(name, mods):
+    """
+    Slaat een profiel op als JSON in ./profiles.
+    """
+    file = DEFAULT_PROFILES_PATH / f"{name}.json"
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(mods, f, indent=2)
+
+def load_profile(name):
+    """
+    Laadt een profiel uit ./profiles.
+    Retourneert een lijst van mods of lege lijst als niet gevonden.
+    """
+    file = DEFAULT_PROFILES_PATH / f"{name}.json"
+    if not file.exists():
         return []
-
-def load_order():
-    path = resource_path("loadorder.json")
-    if not os.path.exists(path):
-        print("[CLOM] Geen loadorder.json gevonden, maak een lege aan.")
-        with open(path, "w") as f:
-            json.dump({}, f)
-        return {}
-    with open(path, "r") as f:
+    with open(file, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def interactive_reorder(mods):
+def load_priorities(file="priority.json"):
     """
-    Eenvoudig console-menu om mods handmatig te herschikken.
+    Laadt prioriteiten uit priority.json.
+    Formaat: { "ModNaam": prioriteit (int) }
     """
-    mods = mods[:]  # kopie
-    while True:
-        print("\nHuidige volgorde:")
-        for i, mod in enumerate(mods):
-            print(f"{i+1}. {mod}")
+    path = Path(file)
+    if not path.exists():
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-        print("\nOpties:")
-        print("  m <nr> <up/down>  - verplaats mod omhoog/omlaag")
-        print("  s                 - sla op en stop")
-        print("  q                 - stop zonder opslaan")
+def sort_load_order(mods, priority_file="priority.json", use_priority=False):
+    """
+    Sorteert bestanden:
+    - Standaard: ASCII sortering
+    - Met use_priority=True: eerst op prioriteit, dan ASCII
+    """
+    priorities = load_priorities(priority_file) if use_priority else {}
+    load_order = []
+    for mod in mods:
+        prio = priorities.get(mod["name"], 0)
+        for f in mod["files"]:
+            load_order.append((mod["name"], f, prio))
+    # sorteer: eerst priority, dan ASCII
+    load_order.sort(key=lambda x: (x[2], x[1]))
+    return load_order
 
-        cmd = input("Voer commando in: ").strip().lower()
-        if cmd == "s":
-            return mods
-        elif cmd == "q":
-            return None
-        elif cmd.startswith("m "):
-            try:
-                _, idx, direction = cmd.split()
-                idx = int(idx) - 1
-                if 0 <= idx < len(mods):
-                    if direction == "up" and idx > 0:
-                        mods[idx-1], mods[idx] = mods[idx], mods[idx-1]
-                    elif direction == "down" and idx < len(mods)-1:
-                        mods[idx+1], mods[idx] = mods[idx], mods[idx+1]
-                    else:
-                        print("Kan niet verder verplaatsen.")
-                else:
-                    print("Ongeldig nummer.")
-            except Exception as e:
-                print("Fout in commando:", e)
-        else:
-            print("Onbekend commando.")
-    # einde while
-
-def apply_order(modlist, order):
-    print("=== Cyberpunk Load Order Manager (CLOM) ===")
-    print("Mods gevonden:", modlist)
-
-    # Standaard sortering: ASCII
-    sorted_mods = sorted(modlist)
-    print("Standaard volgorde (ASCII):", sorted_mods)
-
-    # Interactieve aanpassing
-    new_order = interactive_reorder(sorted_mods)
-    if new_order is None:
-        print("[CLOM] Geen wijzigingen opgeslagen.")
-        return sorted_mods
-
-    # Schrijf nieuwe volgorde naar loadorder.json
-    path = resource_path("loadorder.json")
-    order_dict = {mod: i for i, mod in enumerate(new_order)}
-    with open(path, "w") as f:
-        json.dump(order_dict, f, indent=4)
-
-    print(f"[CLOM] Nieuwe loadorder opgeslagen in {path}")
-    return new_order
-
-def main():
-    modlist = load_modlist()
-    order = load_order()
-    apply_order(modlist, order)
-
-if __name__ == "__main__":
-    main()
